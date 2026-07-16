@@ -7,6 +7,15 @@ import { runDeployment } from "./deploy.js";
 const app = express();
 const port = Number(process.env.PORT || 4500);
 const adminToken = process.env.ADMIN_TOKEN || "dev-token";
+const publicApiPaths = [
+  "/api/health",
+  "/api/login",
+  "/api/logout",
+  "/api/session",
+  "/api/auth/github/enabled",
+  "/api/auth/github/start",
+  "/api/auth/github/callback"
+];
 
 app.use(express.json({
   verify: (req, _res, buffer) => {
@@ -15,8 +24,8 @@ app.use(express.json({
 }));
 
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api") && !["/api/health", "/api/login"].includes(req.path)) {
-    const token = req.headers.authorization?.replace("Bearer ", "");
+  if (req.path.startsWith("/api") && !publicApiPaths.includes(req.path)) {
+    const token = req.headers.authorization?.replace("Bearer ", "") || readCookie(req, "brushout_session");
     if (token !== adminToken) return res.status(401).json({ error: "unauthorized" });
   }
   next();
@@ -28,11 +37,68 @@ app.get("/api/health", (_req, res) => {
 
 app.post("/api/login", (req, res) => {
   if (req.body?.token !== adminToken) return res.status(401).json({ error: "invalid token" });
+  setSessionCookie(res);
   res.json({ token: adminToken });
 });
 
+app.post("/api/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", "brushout_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+  res.json({ status: "ok" });
+});
+
+app.get("/api/session", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "") || readCookie(req, "brushout_session");
+  res.json({ authenticated: token === adminToken });
+});
+
+app.get("/api/auth/github/enabled", (_req, res) => {
+  res.json({ enabled: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) });
+});
+
+app.get("/api/auth/github/start", (_req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID) return res.status(400).send("GITHUB_CLIENT_ID is not configured");
+  const params = new URLSearchParams({
+    client_id: process.env.GITHUB_CLIENT_ID,
+    scope: "repo",
+    state: crypto.randomBytes(16).toString("hex")
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
+});
+
+app.get("/api/auth/github/callback", async (req, res) => {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    return res.status(400).send("GitHub OAuth is not configured");
+  }
+  const code = req.query.code;
+  if (!code) return res.status(400).send("Missing GitHub code");
+
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code
+    })
+  });
+  const data = await response.json();
+  if (!response.ok || !data.access_token) return res.status(400).send("Failed to connect GitHub");
+
+  const db = await readDB();
+  db.settings.githubToken = data.access_token;
+  db.settings.githubConnectedAt = new Date().toISOString();
+  await writeDB(db);
+
+  setSessionCookie(res);
+  res.redirect(process.env.APP_URL || "/");
+});
+
 app.get("/api/github/repos", async (_req, res) => {
-  const token = process.env.GITHUB_TOKEN;
+  const db = await readDB();
+  const token = db.settings.githubToken || process.env.GITHUB_TOKEN;
   if (!token) return res.json({ repos: [] });
   const response = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated", {
     headers: {
@@ -152,6 +218,17 @@ if (process.env.NODE_ENV === "production") {
 app.listen(port, () => {
   console.log(`Brushout Automate running on :${port}`);
 });
+
+function setSessionCookie(res) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", `brushout_session=${adminToken}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000${secure}`);
+}
+
+function readCookie(req, name) {
+  const cookies = req.headers.cookie?.split(";").map((item) => item.trim()) || [];
+  const found = cookies.find((item) => item.startsWith(`${name}=`));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : "";
+}
 
 function validGithubSignature(req) {
   const secret = process.env.GITHUB_WEBHOOK_SECRET;

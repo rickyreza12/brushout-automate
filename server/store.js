@@ -5,6 +5,7 @@ const dataDir = path.resolve("data");
 const dbPath = path.join(dataDir, "brushout.json");
 
 const initialData = {
+  settings: {},
   projects: [],
   deployments: [],
   webhookEvents: []
@@ -13,7 +14,7 @@ const initialData = {
 export async function readDB() {
   await fs.mkdir(dataDir, { recursive: true });
   try {
-    return JSON.parse(await fs.readFile(dbPath, "utf8"));
+    return normalize(JSON.parse(await fs.readFile(dbPath, "utf8")));
   } catch {
     await writeDB(initialData);
     return structuredClone(initialData);
@@ -27,4 +28,15 @@ export async function writeDB(data) {
 
 export function createId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalize(data) {
+  return {
+    ...initialData,
+    ...data,
+    settings: data.settings || {},
+    projects: data.projects || [],
+    deployments: data.deployments || [],
+    webhookEvents: data.webhookEvents || []
+  };
 }

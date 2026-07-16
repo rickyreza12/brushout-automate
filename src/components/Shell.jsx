@@ -1,5 +1,5 @@
 import { Activity, GitBranch, LogOut, Rocket } from "lucide-react";
-import { clearToken } from "../api/client";
+import { api, clearToken } from "../api/client";
 
 export function Shell({ children, onLogout }) {
   return (
@@ -17,7 +17,8 @@ export function Shell({ children, onLogout }) {
           </div>
           <button
             className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700"
-            onClick={() => {
+            onClick={async () => {
+              await api("/api/logout", { method: "POST", auth: false }).catch(() => undefined);
               clearToken();
               onLogout();
             }}

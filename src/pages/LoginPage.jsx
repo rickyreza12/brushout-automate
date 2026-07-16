@@ -1,9 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, setToken } from "../api/client";
 
 export function LoginPage({ onLogin }) {
   const [token, setTokenValue] = useState("");
   const [error, setError] = useState("");
+  const [githubEnabled, setGithubEnabled] = useState(false);
+
+  useEffect(() => {
+    api("/api/session", { auth: false })
+      .then((data) => {
+        if (data.authenticated) onLogin();
+      })
+      .catch(() => undefined);
+    api("/api/auth/github/enabled", { auth: false })
+      .then((data) => setGithubEnabled(data.enabled))
+      .catch(() => undefined);
+  }, [onLogin]);
 
   async function submit(event) {
     event.preventDefault();
@@ -36,6 +48,17 @@ export function LoginPage({ onLogin }) {
         </label>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         <button className="mt-5 w-full rounded-md bg-slate-950 px-4 py-2 text-white">Login</button>
+        <a
+          className={`mt-3 block w-full rounded-md border border-slate-300 px-4 py-2 text-center text-slate-800 ${githubEnabled ? "" : "pointer-events-none opacity-50"}`}
+          href="/api/auth/github/start"
+        >
+          Login with GitHub
+        </a>
+        {!githubEnabled && (
+          <p className="mt-2 text-xs text-slate-500">
+            Configure `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to enable GitHub login.
+          </p>
+        )}
       </form>
     </main>
   );

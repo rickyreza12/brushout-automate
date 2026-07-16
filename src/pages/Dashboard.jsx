@@ -22,6 +22,7 @@ export function Dashboard({ onLogout }) {
   const [form, setForm] = useState(defaultForm);
   const [selectedLog, setSelectedLog] = useState("");
   const [error, setError] = useState("");
+  const [repoSearch, setRepoSearch] = useState("");
 
   const stats = useMemo(() => ({
     projects: projects.length,
@@ -29,6 +30,7 @@ export function Dashboard({ onLogout }) {
     success: deployments.filter((item) => item.status === "success").length,
     running: deployments.filter((item) => item.status === "running").length
   }), [projects, deployments]);
+  const filteredRepos = repos.filter((repo) => repo.fullName.toLowerCase().includes(repoSearch.toLowerCase()));
 
   async function load() {
     const [projectData, deploymentData, repoData] = await Promise.all([
@@ -92,8 +94,14 @@ export function Dashboard({ onLogout }) {
             <Field label="Project name" value={form.name} onChange={(name) => setForm({ ...form, name })} />
             <label className="block">
               <span className="text-sm font-medium text-slate-700">GitHub repo</span>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-slate-950"
+                placeholder="Search repo, e.g. manage-life-be"
+                value={repoSearch}
+                onChange={(event) => setRepoSearch(event.target.value)}
+              />
               <select
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2"
                 value={form.repoUrl}
                 onChange={(event) => {
                   const repo = repos.find((item) => item.cloneUrl === event.target.value);
@@ -105,9 +113,14 @@ export function Dashboard({ onLogout }) {
                   });
                 }}
               >
-                <option value="">Manual URL or select repo</option>
-                {repos.map((repo) => <option key={repo.id} value={repo.cloneUrl}>{repo.fullName}</option>)}
+                <option value="">{repos.length ? "Manual URL or select repo" : "No GitHub repos loaded"}</option>
+                {filteredRepos.map((repo) => <option key={repo.id} value={repo.cloneUrl}>{repo.fullName}</option>)}
               </select>
+              {repos.length === 0 && (
+                <p className="mt-2 text-xs text-slate-500">
+                  Add `GITHUB_TOKEN` or login with GitHub OAuth to load repositories.
+                </p>
+              )}
             </label>
             <Field label="Repo URL" value={form.repoUrl} onChange={(repoUrl) => setForm({ ...form, repoUrl })} />
             <Field label="Branch" value={form.branch} onChange={(branch) => setForm({ ...form, branch })} />
