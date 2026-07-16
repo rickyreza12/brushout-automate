@@ -1,0 +1,14 @@
+services:
+  brushout-automate:
+    build: .
+    container_name: brushout-automate
+    restart: unless-stopped
+    ports:
+      - "4500:4500"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/brushout/apps:/opt/brushout/apps
+      - /opt/brushout/logs:/opt/brushout/logs
