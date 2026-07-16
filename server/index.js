@@ -15,7 +15,7 @@ app.use(express.json({
 }));
 
 app.use((req, res, next) => {
-  if (req.path.startsWith("/api") && !["/api/health"].includes(req.path)) {
+  if (req.path.startsWith("/api") && !["/api/health", "/api/login"].includes(req.path)) {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (token !== adminToken) return res.status(401).json({ error: "unauthorized" });
   }
